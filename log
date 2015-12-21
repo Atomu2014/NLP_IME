@@ -1,0 +1,58 @@
+corpus: big.txt
+algo: symspell
+total: 1000000
+match: 661737
+contain: 131205
+overall match rate: 0.661737
+overall contain rate: 0.131205
+
+corpus: corpus.sens.10k
+dict: corpus.words.10k
+algo: symspell
+total: 1000000
+match: 710930
+contain: 150674
+hit: 996637
+match rate: 0.71093
+contain rate: 0.150674
+
+corpus: corpus.sens.20k
+dict: corpus.words.20k
+algo: symspell
+total: 1000000
+match: 708802
+contain: 171150
+hit: 997977
+match rate: 0.708802
+contain rate: 0.17115
+
+dict: corpus.words.10k
+corpus: corpus.sens.10k
+algo: max(Pr(bigram))
+total: 1000000
+hit: 975406
+match: 100730
+hit match rate: 0.103269817901
+overall match rate: 0.10073
+hit rate: 0.975406
+
+dict: corpus.words.10k
+corpus: corpus.sens.10k
+algo: symspell
+total: 1000000
+match: 710931
+hit: 996637
+hit match rate: 0.71332992855
+overall match rate: 0.710931
+hit rate: 0.996637
+
+dict: corpus.words.10k
+corpus: corpus.sens.10k
+train: train.part1
+algo: max(Pr(symspell))
+total: 99910
+match: 19388
+hit: 99565
+hit match rate: 0.194727062723
+overall match rate: 0.194054649184
+hit rate: 0.996546892203
