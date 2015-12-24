@@ -4,6 +4,13 @@ import re
 import time
 
 import numpy as np
+import scipy.sparse as spr
+
+letters = {'\'': 1, '<s>': 2, 'a': 3, 'b': 4, 'c': 5, 'd': 6, 'e': 7, 'f': 8, 'g': 9, 'h': 10, 'i': 11, 'j': 12,
+           'k': 13, 'l': 14, 'm': 15, 'n': 16, 'o': 17, 'p': 18, 'q': 19, 'r': 20, 's': 21, 't': 22, 'u': 23, 'v': 24,
+           'w': 25, 'x': 26, 'y': 27, 'z': 28}
+letters_num = len(letters) + 1
+word_length = 30
 
 
 def split_train(train_set, alpha=0.1):
@@ -34,6 +41,19 @@ def make_sens():
                             fout.write(sen + '\n')
 
 
+def make_word_vector(word):
+    if word == '<s>':
+        return [letters[word]]
+
+    vect = []
+    for c in word[:word_length]:
+        if c in letters:
+            vect.append(letters[c])
+        else:
+            vect.append(0)
+    return vect
+
+
 def clean_sens(dict_in, corpus_out):
     with open('raw/corpus.sens', 'r') as corpus_in:
         with open(corpus_out, 'w') as corpus_out:
@@ -48,6 +68,39 @@ def clean_sens(dict_in, corpus_out):
                         break
                 if flag:
                     corpus_out.write(line + '\n')
+
+
+def count_word_length():
+    # 42 23 23 -> 30
+    with open('raw/train', 'r') as fin:
+        with open('raw/log', 'w') as log_out:
+            len1 = 0
+            len2 = 0
+            len3 = 0
+            dict = []
+            for line in fin:
+                line = line.strip().lower()
+                index1 = line.rfind(' ')
+                label = line[index1 + 1:]
+                index2 = line.rfind(' ', 0, index1)
+                last = line[index2 + 1:index1]
+                index3 = line.rfind(' ', 0, index2)
+                if index3 != -1:
+                    last2 = line[index3 + 1: index2]
+                else:
+                    last2 = '<s>'
+
+                len1 = max(len1, len(last2))
+                len2 = max(len2, len(last))
+                len3 = max(len3, len(label))
+
+                dict.append(last2)
+
+            dict = sorted(set(dict), key=lambda x: -len(x))
+            for word in dict:
+                log_out.write(word + '\n')
+
+        print len1, len2, len3
 
 
 def count_word():
@@ -112,11 +165,47 @@ def load_bigrams(bigram_path):
     return bigrams
 
 
+def load_bigrams2(bigram_path):
+    bigram_bin_path = bigram_path + '.bin2'
+    if os.path.isfile(bigram_bin_path):
+        return pk.load(open(bigram_bin_path, 'r'))
+
+    bigrams = {}
+    with open(bigram_path, 'r') as bigram_in:
+        for line in bigram_in:
+            arr = line.strip().split()
+            if arr[0] in bigrams:
+                bigrams[arr[0]][arr[1]] = int(arr[2])
+            else:
+                bigrams[arr[0]] = {arr[1]: int(arr[2])}
+
+    for key in bigrams.keys():
+        counter = 0
+        for key2 in bigrams[key]:
+            counter += bigrams[key][key2]
+        bigrams[key]['#total#'] = counter
+
+    pk.dump(bigrams, open(bigram_bin_path, 'w'))
+    return bigrams
+
+
+def get_bifreq(bigrams, key, key2, norm=True):
+    if key in bigrams:
+        # if count_edit == 0:
+        #     count_edit = count_total * 1.0 / (len(bigrams[key]) + 1)
+        if key2 in bigrams[key]:
+            if norm:
+                return bigrams[key][key2] * 1.0 / bigrams[key]['#total#']
+            else:
+                return bigrams[key][key2]
+    return 0
+
+
 def make_feature(corpus, train_set):
     from SymSpell import SymSpell
     sp = SymSpell(corpus)
 
-    print 'test edit', corpus, train_set
+    print 'make feature', corpus, train_set
     with open(train_set, 'r') as train_in:
         with open(train_set + '.feature', 'w') as feature_out:
             bigrams = load_bigrams(corpus + '.bigram')
@@ -127,15 +216,13 @@ def make_feature(corpus, train_set):
 
             for line in train_in:
                 line = line.strip().lower()
-                index = line.rfind(' ')
-                label = line[index + 1:]
-                line = line[:index]
-                index = line.rfind(' ')
-                last = line[index + 1:]
-                line = line[:index]
-                index = line.rfind(' ')
-                if index != -1:
-                    last2 = line[index + 1:]
+                index1 = line.rfind(' ')
+                label = line[index1 + 1:]
+                index2 = line.rfind(' ', 0, index1)
+                last = line[index2 + 1:index1]
+                index3 = line.rfind(' ', 0, index2)
+                if index3 != -1:
+                    last2 = line[index3 + 1: index2]
                 else:
                     last2 = '<s>'
 
@@ -178,3 +265,93 @@ def make_feature(corpus, train_set):
                         feature_out.write(str(2 * sp.unique_word_count + 5) + ':' + str(bigrams[term]) + '\n')
                     else:
                         feature_out.write(str(2 * sp.unique_word_count + 5) + ':0\n')
+
+
+def get_feature_word_vector(last2, last, edit, label, freq, bi_freq):
+    # label
+    # last2
+    # last
+    # edit
+    # freq
+    # bi_freq
+    foo = ''
+    st = 0
+
+    vect_last2 = make_word_vector(last2)
+    for i in range(len(vect_last2)):
+        foo += str(st + i * letters_num + vect_last2[i]) + ':1 '
+    st += word_length * letters_num
+    vect_last = make_word_vector(last)
+    for i in range(len(vect_last)):
+        foo += str(st + i * letters_num + vect_last[i]) + ':1 '
+    st += word_length * letters_num
+    vect_edit = make_word_vector(edit)
+    for i in range(len(vect_edit)):
+        foo += str(st + i * letters_num + vect_edit[i]) + ':1 '
+    st += word_length * letters_num
+    foo += str(st) + ':' + str(freq) + ' '
+    st += 1
+    foo += str(st) + ':' + str(bi_freq) + '\n'
+
+    return foo
+
+
+def foo_2_csr(foos):
+    r = 0
+    data = []
+    row_ind = []
+    col_ind = []
+    for foo in foos:
+        for fea in foo.split():
+            x, y = fea.split(':')
+            data.append(float(y))
+            col_ind.append(int(x))
+            row_ind.append(r)
+        r += 1
+    return spr.csr_matrix((data, (row_ind, col_ind)))
+
+
+def make_feature_word_vector(corpus, train_set):
+    from SymSpell import SymSpell
+    sp = SymSpell(corpus)
+
+    print 'make feature word vector', corpus, train_set
+    with open(train_set, 'r') as train_in:
+        with open(train_set + '.vfeature2', 'w') as feature_out:
+            bigrams = load_bigrams2(corpus + '.bigram')
+
+            count_total = 0
+            count_feature = long(0)
+            stime = time.time()
+            for line in train_in:
+                line = line.strip().lower()
+                index1 = line.rfind(' ')
+                label = line[index1 + 1:]
+                index2 = line.rfind(' ', 0, index1)
+                last = line[index2 + 1:index1]
+                index3 = line.rfind(' ', 0, index2)
+                if index3 != -1:
+                    last2 = line[index3 + 1: index2]
+                else:
+                    last2 = '<s>'
+
+                count_total += 1
+
+                # if sp.get_index(last):
+                #     continue
+
+                if count_total % 10000 == 0:
+                    etime = time.time()
+                    print count_total, count_feature, etime - stime
+                    stime = etime
+
+                sug_list = sp.get_suggestions(last, True)
+                for edit, _ in sug_list:
+                    count_feature += 1
+
+                    if edit == label:
+                        feature_out.write('1 ')
+                    else:
+                        feature_out.write('0 ')
+                    feature_out.write(get_feature_word_vector(last2, last, edit, label, sp.get_freq(edit),
+                                                              get_bifreq(bigrams, last2, edit)))

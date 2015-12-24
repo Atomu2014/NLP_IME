@@ -396,9 +396,17 @@ class SymSpell:
             return self.dictionary[word][2]
         return 0
 
+    def get_freq(self, word, norm=True):
+        if word in self.dictionary:
+            if norm:
+                return self.dictionary[word][1] * 1.0 / self.total_word_count
+            else:
+                return self.dictionary[word][1]
+        return 0
+
 
 # def correct_document(fname, printlist=True):
-#     # correct an entire document
+# # correct an entire document
 #     with open(fname) as file:
 #         doc_word_count = 0
 #         corrected_word_count = 0
@@ -429,7 +437,7 @@ class SymSpell:
 
 
 if __name__ == "__main__":
-    sym = SymSpell('testdata/big.txt')
+    sym = SymSpell('raw/corpus.sens.14k')
 
     print " "
     print "Word correction"
