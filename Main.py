@@ -10,15 +10,7 @@ def last_as_label(train_set):
         count_match = 0
 
         for line in fin:
-            line = line.strip()
-            index = line.rfind(' ')
-            label = line[index + 1:].lower()
-            line = line[0:index]
-            index = line.rfind(' ')
-            if index == -1:
-                last = line.lower()
-            else:
-                last = line[index + 1:].lower()
+            label, last = split_last_words(line, 2)
 
             count_total += 1
             if last == label:
@@ -35,21 +27,15 @@ def test_edit(corpus, train_set):
     print 'test edit', corpus, train_set
     with open(train_set, 'r') as train_in:
         count_total = 0
-        count_match1 = 0
-        count_match2 = 0
-        count_contain1 = 0
-        count_contain2 = 0
-        count_total1 = 0
-        count_total2 = 0
+        count_match = 0
+        count_contain = 0
+        count_pos = 0
+        count_neg = 0
 
         stime = time.time()
 
         for line in train_in:
-            line = line.strip().lower()
-            index1 = line.rfind(' ')
-            label = line[index1 + 1:]
-            index2 = line.rfind(' ', 0, index1)
-            last = line[index2 + 1:index1]
+            label, last, last2 = split_last_words(line, 3)
 
             count_total += 1
 
@@ -59,50 +45,46 @@ def test_edit(corpus, train_set):
                 stime = etime
 
             sug_list = sp.get_suggestions(last, True)
+            if label in [x[0] for x in sug_list]:
+                count_pos += 1
+                count_contain += 1
+                count_neg += len(sug_list) - 1
+                #
+                # if len(sug_list) < 1:
+                #     continue
+                #
+                # if sug_list[0][1][1] == 0:
+                #     if sug_list[0][0] == label:
+                #         count_match += 1
+                # else:
+                #     for edit, val in sug_list:
+                #         if len(val[2].strip('s')) == 0:
+                #             if edit == label:
+                #                 count_match += 1
+                #                 break
 
-            if sp.get_index(last) == 0:
-                count_total1 += 1
-                if len(sug_list) < 1:
-                    continue
+                # completion
+                # completions = filter(lambda x: x[0].startswith(last), sug_list)
+                # if len(completions) > 0:
+                #     if label == completions[0][0]:
+                #         count_match += 1
+                #     # elif label == sug_list[0][0]:
+                #     #     count_match += 1
+                #     elif label in [x[0] for x in sug_list] or label in [x[0] for x in completions]:
+                #         count_contain += 1
+                #         # elif label == sug_list[0][0]:
+                #         #     count_match += 1
+                #         # count_match_edit += 1
+                # elif label in [x[0] for x in sug_list]:
+                #     count_contain += 1
 
-                if sug_list[0][0] == label:
-                    count_match1 += 1
-                elif label in [x[0] for x in sug_list]:
-                    count_contain1 += 1
-            else:
-                count_total2 += 1
-                if len(sug_list) < 1:
-                    continue
-
-                if sug_list[0][0] == label:
-                    count_match2 += 1
-                elif label in [x[0] for x in sug_list]:
-                    count_contain2 += 1
-
-            # completion
-            # completions = filter(lambda x: x[0].startswith(last), sug_list)
-            # if len(completions) > 0:
-            #     if label == completions[0][0]:
-            #         count_match += 1
-            #     # elif label == sug_list[0][0]:
-            #     #     count_match += 1
-            #     elif label in [x[0] for x in sug_list] or label in [x[0] for x in completions]:
-            #         count_contain += 1
-            #         # elif label == sug_list[0][0]:
-            #         #     count_match += 1
-            #         # count_match_edit += 1
-            # elif label in [x[0] for x in sug_list]:
-            #     count_contain += 1
-
-
-    print count_match1, count_contain1, count_match2, count_contain2, count_total1, count_total2, count_total
-    print 'match rate:', count_match1 * 1.0 / count_total1, count_match2 * 1.0 / count_total2
-    print 'overall match rate', count_match1 * 1.0 / count_total, count_match2 * 1.0 / count_total
-    print 'contain rate:', count_contain1 * 1.0 / count_total1, count_contain2 * 1.0 / count_total2
-    print count_total1 * 1.0 / count_total
+    print count_match, count_contain, count_total
+    print 'match rate:', count_match * 1.0 / count_total
+    print 'contain rate', count_contain * 1.0 / count_total
+    print count_pos, count_neg, count_neg * 1.0 / count_pos
 
 
-def test_vector(corpus, train_set, model_path):
+def test_word_vector(corpus, train_set, model_path):
     from SymSpell import SymSpell
     sp = SymSpell(corpus)
     print 'test vector', corpus, train_set, model_path
@@ -116,16 +98,7 @@ def test_vector(corpus, train_set, model_path):
         stime = time.time()
 
         for line in train_in:
-            line = line.strip().lower()
-            index1 = line.rfind(' ')
-            label = line[index1 + 1:]
-            index2 = line.rfind(' ', 0, index1)
-            last = line[index2 + 1:index1]
-            index3 = line.rfind(' ', 0, index2)
-            if index3 != -1:
-                last2 = line[index3 + 1: index2]
-            else:
-                last2 = '<s>'
+            label, last, last2 = split_last_words(line, 3)
 
             count_total += 1
             if count_total % 1000 == 0:
@@ -152,6 +125,40 @@ def test_vector(corpus, train_set, model_path):
     print count_match * 1.0 / count_total
 
 
+def test_edit_vector(corpus, train_set, model_path):
+    from SymSpell import SymSpell
+    sp = SymSpell(corpus)
+    print 'test edit vector', corpus, train_set, model_path
+    with open(train_set, 'r') as train_in:
+        bst = xgb.Booster(model_file=model_path)
+
+        count_total = 0
+        count_match = 0
+        stime = time.time()
+
+        for line in train_in:
+            label, last = split_last_words(line, 2)
+            count_total += 1
+            if count_total % 1000 == 0:
+                etime = time.time()
+                print count_total, etime - stime
+                stime = etime
+
+            sug_list = sp.get_suggestions(last, True)
+            if len(sug_list) == 0:
+                continue
+
+            foos = [get_feature_edit_vector(sp, edit, val) for edit, val in sug_list]
+            dtest = xgb.DMatrix(foo_2_csr(foos), silent=True)
+            preds = bst.predict(dtest)
+            best_cand = sug_list[np.argmax(preds)][0]
+            if best_cand == label:
+                count_match += 1
+
+    print count_match, count_total
+    print count_match * 1.0 / count_total
+
+
 def test_bigram(corpus, train_set):
     print 'test bigram'
     print 'train set', train_set
@@ -168,16 +175,7 @@ def test_bigram(corpus, train_set):
         # sp.verbose = 0
 
         for line in train_in:
-            line = line.strip().lower()
-            index1 = line.rfind(' ')
-            label = line[index1 + 1:]
-            index2 = line.rfind(' ', 0, index1)
-            last = line[index2 + 1:index1]
-            index3 = line.rfind(' ', 0, index2)
-            if index3 != -1:
-                last2 = line[index3 + 1: index2]
-            else:
-                last2 = '<s>'
+            label, last, last2 = split_last_words(line, 3)
 
             count_total += 1
 
@@ -211,9 +209,11 @@ def test_bigram(corpus, train_set):
 
 if __name__ == "__main__":
     # make_feature('raw/corpus.sens.14k', 'raw/train.part1.part1')
-    # split_train('raw/train.part1.vfeature2', 0.7)
+    # split_train('raw/train.efeature', 0.7)
     # make_feature_word_vector('raw/corpus.sens.14k', 'raw/train.part1')
+    make_feature_edit_vector('raw/corpus.sens.14k', 'raw/train.part2')
     # test_bigram('raw/corpus.sens.14k', 'raw/train.part1')
     # test_vector('raw/corpus.sens.14k', 'raw/train.part1', 'raw/train.part1.vfeature2.part2.model')
     # last_as_label('raw/train.part1')
-    test_edit('raw/corpus.sens.14k', 'raw/train.part1')
+    # test_edit('raw/corpus.sens.14k', 'raw/train.part1')
+    # test_edit_vector('raw/corpus.sens.14k', 'raw/train', 'raw/train.efeature.part1.model')

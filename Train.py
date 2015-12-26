@@ -1,7 +1,7 @@
 import xgboost as xgb
 
-train_path = 'raw/train.part1.vfeature2.part2'
-test_path = 'raw/train.part1.vfeature2.part2'
+train_path = 'raw/train.efeature.part1'
+test_path = 'raw/train.efeature.part2'
 
 dtrain = xgb.DMatrix(train_path)
 dtest = xgb.DMatrix(test_path)

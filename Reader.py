@@ -26,6 +26,20 @@ def split_train(train_set, alpha=0.1):
                         out2.write(line + '\n')
 
 
+def split_last_words(line, num=3):
+    line = line.strip().lower()
+    lastindex = len(line)
+    res = []
+    for i in range(num):
+        index = line.rfind(' ', 0, lastindex)
+        if index != -1:
+            word = line[index + 1:lastindex]
+        else:
+            word = '<s>'
+        res.append(word)
+    return res
+
+
 def is_ascii(s):
     return all(ord(c) < 128 for c in s)
 
@@ -79,16 +93,7 @@ def count_word_length():
             len3 = 0
             dict = []
             for line in fin:
-                line = line.strip().lower()
-                index1 = line.rfind(' ')
-                label = line[index1 + 1:]
-                index2 = line.rfind(' ', 0, index1)
-                last = line[index2 + 1:index1]
-                index3 = line.rfind(' ', 0, index2)
-                if index3 != -1:
-                    last2 = line[index3 + 1: index2]
-                else:
-                    last2 = '<s>'
+                label, last, last2 = split_last_words(line)
 
                 len1 = max(len1, len(last2))
                 len2 = max(len2, len(last))
@@ -137,6 +142,95 @@ def count_ngram(N, fin, fout):
         with open(fout, 'w') as ngrams_out:
             for key, value in sorted(ngrams.items(), key=lambda (term, freq): (term, -freq)):
                 ngrams_out.write(key + '\t' + str(value) + '\n')
+
+
+def count_transform(train_set, test_set):
+    with open(train_set, 'r') as train_in:
+        trans = {}
+        for line in train_in:
+            label, last = split_last_words(line, 2)
+
+            if last in trans:
+                if label in trans[last]:
+                    trans[last][label] += 1
+                else:
+                    trans[last][label] = 1
+            else:
+                trans[last] = {label: 1}
+
+        for k in trans.keys():
+            trans[k] = sorted(trans[k].items(), reverse=True, key=lambda (a, b): b)[0][0]
+    with open(test_set, 'r') as test_in:
+        count_match = 0
+        count_total = 0
+        count_miss = 0
+        for line in test_in:
+            label, last = split_last_words(line, 2)
+
+            count_total += 1
+            if last in trans:
+                if trans[last] == label:
+                    count_match += 1
+            else:
+                count_miss += 1
+
+    print count_match, count_miss, count_total
+    print count_match * 1.0 / count_total, count_miss * 1.0 / count_total
+
+
+def count_transform_bi(train_set, test_set):
+    with open(train_set, 'r') as train_in:
+        trans = {}
+        trans_bi = {}
+        for line in train_in:
+            label, last, last2 = split_last_words(line, 3)
+
+            if last in trans:
+                if label in trans[last]:
+                    trans[last][label] += 1
+                else:
+                    trans[last][label] = 1
+            else:
+                trans[last] = {label: 1}
+
+            term = last2 + '\t' + last
+            if term in trans_bi:
+                if label in trans_bi[term]:
+                    trans_bi[term][label] += 1
+                else:
+                    trans_bi[term][label] = 1
+            else:
+                trans_bi[term] = {label: 1}
+
+        for k in trans.keys():
+            trans[k] = sorted(trans[k].items(), reverse=True, key=lambda (a, b): b)[0][0]
+        for k in trans_bi.keys():
+            trans_bi[k] = sorted(trans_bi[k].items(), reverse=True, key=lambda (a, b): b)[0][0]
+
+    with open(test_set, 'r') as test_in:
+        count_match = 0
+        count_total = 0
+        count_miss = 0
+        for line in test_in:
+            label, last, last2 = split_last_words(line, 3)
+
+            count_total += 1
+            term = last2 + '\t' + last
+            if term in trans_bi:
+                if trans_bi[term] == label:
+                    count_match += 1
+            elif last in trans:
+                if trans[last] == label:
+                    count_match += 1
+            else:
+                count_miss += 1
+
+    print count_match, count_miss, count_total
+    print count_match * 1.0 / count_total, count_miss * 1.0 / count_total
+
+
+# count_transform('raw/train.part1', 'raw/train.part2')
+# count_transform_bi('raw/train.part1', 'raw/train.part2')
 
 
 def load_dictionary(dict):
@@ -215,16 +309,7 @@ def make_feature(corpus, train_set):
             stime = time.time()
 
             for line in train_in:
-                line = line.strip().lower()
-                index1 = line.rfind(' ')
-                label = line[index1 + 1:]
-                index2 = line.rfind(' ', 0, index1)
-                last = line[index2 + 1:index1]
-                index3 = line.rfind(' ', 0, index2)
-                if index3 != -1:
-                    last2 = line[index3 + 1: index2]
-                else:
-                    last2 = '<s>'
+                label, last, last2 = split_last_words(line, 3)
 
                 count_total += 1
 
@@ -324,16 +409,7 @@ def make_feature_word_vector(corpus, train_set):
             count_feature = long(0)
             stime = time.time()
             for line in train_in:
-                line = line.strip().lower()
-                index1 = line.rfind(' ')
-                label = line[index1 + 1:]
-                index2 = line.rfind(' ', 0, index1)
-                last = line[index2 + 1:index1]
-                index3 = line.rfind(' ', 0, index2)
-                if index3 != -1:
-                    last2 = line[index3 + 1: index2]
-                else:
-                    last2 = '<s>'
+                label, last, last2 = split_last_words(line, 3)
 
                 count_total += 1
 
@@ -355,3 +431,52 @@ def make_feature_word_vector(corpus, train_set):
                         feature_out.write('0 ')
                     feature_out.write(get_feature_word_vector(last2, last, edit, label, sp.get_freq(edit),
                                                               get_bifreq(bigrams, last2, edit)))
+
+
+def get_feature_edit_vector(sp, edit, val):
+    foo = ''
+    foo += str(sp.get_index(edit)) + ':1 '
+    if val[2] == '':
+        foo += str(sp.unique_word_count + 1) + ':1'
+    elif val[2] == 's':
+        foo += str(sp.unique_word_count + 2) + ':1'
+    elif val[2] == 'a':
+        foo += str(sp.unique_word_count + 3) + ':1'
+    elif val[2] == 'd':
+        foo += str(sp.unique_word_count + 4) + ':1'
+    elif val[2] == 't':
+        foo += str(sp.unique_word_count + 5) + ':1'
+    foo += '\n'
+    return foo
+
+
+def make_feature_edit_vector(corpus, train_set):
+    from SymSpell import SymSpell
+    sp = SymSpell(corpus)
+    sp.max_edit_distance = 1
+
+    print 'make feature edit vector', corpus, train_set
+    with open(train_set, 'r') as train_in:
+        with open(train_set + '.efeature', 'w') as fea_out:
+            count_total = 0
+            stime = time.time()
+
+            for line in train_in:
+                label, last = split_last_words(line, 2)
+
+                count_total += 1
+
+                if count_total % 10000 == 0:
+                    etime = time.time()
+                    print count_total, etime - stime
+                    stime = etime
+
+                sug_list = sp.get_suggestions(last, True)
+                for edit, val in sug_list:
+                    if edit == label:
+                        fea_out.write('1 ')
+                    else:
+                        fea_out.write('0 ')
+                    fea_out.write(get_feature_edit_vector(sp, edit, val))
+
+
