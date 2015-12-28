@@ -86,8 +86,8 @@ from Editor import *
 
 
 class SymSpell:
-    def __init__(self, corpus_path):
-        self.max_edit_distance = 3
+    def __init__(self, corpus_path, max_dist=3, add_dict=None):
+        self.max_edit_distance = max_dist
         self.verbose = 2
         # 0: top suggestion
         # 1: all suggestions of smallest edit distance
@@ -97,6 +97,10 @@ class SymSpell:
         self.longest_word_length = 0
         self.total_word_count = 0
         self.unique_word_count = 0
+
+        if add_dict:
+            self.add_dict = add_dict
+            self.add_dict_size = len(add_dict)
 
         print "Please wait..."
         start_time = time.time()
@@ -240,6 +244,9 @@ class SymSpell:
                     # than input string since only deletes are added (unless
                     # manual dictionary corrections are added)
                     assert len(string) >= len(q_item)
+                    '''
+                    suggest_dict[q_item] = (self.dictionary[q_item][1], len(string) - len(q_item))
+                    '''
                     suggest_dict[q_item] = (self.dictionary[q_item][1],
                                             len(string) - len(q_item), 'a' * (len(string) - len(q_item)))
                     # early exit
@@ -361,6 +368,13 @@ class SymSpell:
             return self.dictionary[word][2]
         return 0
 
+    def get_index2(self, word):
+        if word in self.dictionary and len(self.dictionary[word]) > 2:
+            return self.dictionary[word][2]
+        if word in self.add_dict:
+            return self.add_dict[word]
+        return 0
+
     def get_freq(self, word, norm=True):
         if word in self.dictionary:
             if norm:
@@ -368,37 +382,6 @@ class SymSpell:
             else:
                 return self.dictionary[word][1]
         return 0
-
-
-# def correct_document(fname, printlist=True):
-# # correct an entire document
-#     with open(fname) as file:
-#         doc_word_count = 0
-#         corrected_word_count = 0
-#         unknown_word_count = 0
-#         print "Finding misspelled words in your document..."
-#
-#         for i, line in enumerate(file):
-#             # separate by words by non-alphabetical characters
-#             doc_words = re.findall('[a-z]+', line.lower())
-#             for doc_word in doc_words:
-#                 doc_word_count += 1
-#                 suggestion = best_word(doc_word, silent=True)
-#                 if suggestion is None:
-#                     if printlist:
-#                         print "In line %i, the word < %s > was not found (no suggested correction)" % (i, doc_word)
-#                     unknown_word_count += 1
-#                 elif suggestion[0] != doc_word:
-#                     if printlist:
-#                         print "In line %i, %s: suggested correction is < %s >" % (i, doc_word, suggestion[0])
-#                     corrected_word_count += 1
-#
-#     print "-----"
-#     print "total words checked: %i" % doc_word_count
-#     print "total unknown words: %i" % unknown_word_count
-#     print "total potential errors found: %i" % corrected_word_count
-#
-#     return
 
 
 if __name__ == "__main__":

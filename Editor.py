@@ -1,6 +1,3 @@
-# letters = "'abcdefghijklmnopqrstuvwxyz"
-
-
 def insertCost(a):
     return 1
 
@@ -91,5 +88,3 @@ def count_ops():
                 line = line.strip().split()
                 edit = dldist_with_op(line[1], line[2])
                 fout.write(str(edit[0]) + '\t' + edit[1] + '\n')
-
-

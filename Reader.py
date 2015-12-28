@@ -11,6 +11,7 @@ letters = {'\'': 1, '<s>': 2, 'a': 3, 'b': 4, 'c': 5, 'd': 6, 'e': 7, 'f': 8, 'g
            'w': 25, 'x': 26, 'y': 27, 'z': 28}
 letters_num = len(letters) + 1
 word_length = 30
+op_costs = {'s': 1, 'a': 2, 'd': 3, 't': 4}
 
 
 def split_train(train_set, alpha=0.1):
@@ -37,6 +38,7 @@ def split_last_words(line, num=3):
         else:
             word = '<s>'
         res.append(word)
+        lastindex = index
     return res
 
 
@@ -144,93 +146,57 @@ def count_ngram(N, fin, fout):
                 ngrams_out.write(key + '\t' + str(value) + '\n')
 
 
-def count_transform(train_set, test_set):
+def ngram_on_train(train_set, test_set, max_len=6):
     with open(train_set, 'r') as train_in:
-        trans = {}
+        trans = [{} for i in range(max_len)]
         for line in train_in:
-            label, last = split_last_words(line, 2)
+            words = line.strip().lower().split('<s>')[-1].split(' ')
+            # words = line.strip().lower().split(' ')
+            label = words[-1]
+            if words[0] != '<s>':
+                words = ['<s>'] + words
+            words = words[:-1]
 
-            if last in trans:
-                if label in trans[last]:
-                    trans[last][label] += 1
+            for i in range(min(max_len, len(words))):
+                term = ' '.join(words[len(words) - 1 - i:])
+                if term in trans[i]:
+                    if label in trans[i][term]:
+                        trans[i][term][label] += 1
+                    else:
+                        trans[i][term][label] = 1
                 else:
-                    trans[last][label] = 1
-            else:
-                trans[last] = {label: 1}
+                    trans[i][term] = {label: 1}
 
-        for k in trans.keys():
-            trans[k] = sorted(trans[k].items(), reverse=True, key=lambda (a, b): b)[0][0]
+        for i in range(len(trans)):
+            for k in trans[i].keys():
+                trans[i][k] = sorted(trans[i][k].items(), reverse=True, key=lambda (a, b): b)[0][0]
+
     with open(test_set, 'r') as test_in:
         count_match = 0
-        count_total = 0
         count_miss = 0
+        count_total = 0
         for line in test_in:
-            label, last = split_last_words(line, 2)
-
+            words = line.strip().lower().split('<s>')[-1].split(' ')
+            # words = line.strip().lower().split(' ')
+            label = words[-1]
+            if words[0] != '<s>':
+                words = ['<s>'] + words
+            words = words[:-1]
             count_total += 1
-            if last in trans:
-                if trans[last] == label:
-                    count_match += 1
-            else:
+
+            flag = False
+            for i in range(min(max_len, len(words)) - 1, -1, -1):
+                term = ' '.join(words[len(words) - 1 - i:])
+                if term in trans[i]:
+                    if trans[i][term] == label:
+                        count_match += 1
+                        flag = True
+                    break
+            if not flag:
                 count_miss += 1
 
     print count_match, count_miss, count_total
     print count_match * 1.0 / count_total, count_miss * 1.0 / count_total
-
-
-def count_transform_bi(train_set, test_set):
-    with open(train_set, 'r') as train_in:
-        trans = {}
-        trans_bi = {}
-        for line in train_in:
-            label, last, last2 = split_last_words(line, 3)
-
-            if last in trans:
-                if label in trans[last]:
-                    trans[last][label] += 1
-                else:
-                    trans[last][label] = 1
-            else:
-                trans[last] = {label: 1}
-
-            term = last2 + '\t' + last
-            if term in trans_bi:
-                if label in trans_bi[term]:
-                    trans_bi[term][label] += 1
-                else:
-                    trans_bi[term][label] = 1
-            else:
-                trans_bi[term] = {label: 1}
-
-        for k in trans.keys():
-            trans[k] = sorted(trans[k].items(), reverse=True, key=lambda (a, b): b)[0][0]
-        for k in trans_bi.keys():
-            trans_bi[k] = sorted(trans_bi[k].items(), reverse=True, key=lambda (a, b): b)[0][0]
-
-    with open(test_set, 'r') as test_in:
-        count_match = 0
-        count_total = 0
-        count_miss = 0
-        for line in test_in:
-            label, last, last2 = split_last_words(line, 3)
-
-            count_total += 1
-            term = last2 + '\t' + last
-            if term in trans_bi:
-                if trans_bi[term] == label:
-                    count_match += 1
-            elif last in trans:
-                if trans[last] == label:
-                    count_match += 1
-            else:
-                count_miss += 1
-
-    print count_match, count_miss, count_total
-    print count_match * 1.0 / count_total, count_miss * 1.0 / count_total
-
-
-# count_transform('raw/train.part1', 'raw/train.part2')
-# count_transform_bi('raw/train.part1', 'raw/train.part2')
 
 
 def load_dictionary(dict):
@@ -238,7 +204,32 @@ def load_dictionary(dict):
     return pd.read_csv(dict, names=['word'], dtype={'word': str})
 
 
+def load_additional_dict(corpus, train_set):
+    print 'load additional dictionary', corpus, train_set
+
+    add_dict_path = train_set + '.adddict'
+    if os.path.isfile(add_dict_path):
+        return pk.load(open(add_dict_path, 'r'))
+
+    from SymSpell import SymSpell
+    sp = SymSpell(corpus, 1)
+
+    with open(train_set, 'r') as fin:
+        add_dict = {}
+        cnt = sp.unique_word_count + 1
+        for line in fin:
+            label, last = split_last_words(line.strip().lower(), 2)
+            if sp.get_index(last) == 0 and last not in add_dict:
+                add_dict[last] = cnt
+                cnt += 1
+
+    pk.dump(add_dict, open(train_set + '.adddict', 'w'))
+    return add_dict
+
+
 def load_bigrams(bigram_path):
+    print 'load bigrams', bigram_path, 'form: {dict:[list]}'
+
     bigrams_bin_path = bigram_path + '.bin'
     if os.path.isfile(bigrams_bin_path):
         return pk.load(open(bigrams_bin_path, 'r'))
@@ -260,6 +251,8 @@ def load_bigrams(bigram_path):
 
 
 def load_bigrams2(bigram_path):
+    print 'load bigrams2', bigram_path, "form: {dict:{dict ('#total#: total_num')}}"
+
     bigram_bin_path = bigram_path + '.bin2'
     if os.path.isfile(bigram_bin_path):
         return pk.load(open(bigram_bin_path, 'r'))
@@ -283,10 +276,8 @@ def load_bigrams2(bigram_path):
     return bigrams
 
 
-def get_bifreq(bigrams, key, key2, norm=True):
+def get_bifreq(bigrams, key, key2, norm=True, smooth=False):
     if key in bigrams:
-        # if count_edit == 0:
-        #     count_edit = count_total * 1.0 / (len(bigrams[key]) + 1)
         if key2 in bigrams[key]:
             if norm:
                 return bigrams[key][key2] * 1.0 / bigrams[key]['#total#']
@@ -433,50 +424,51 @@ def make_feature_word_vector(corpus, train_set):
                                                               get_bifreq(bigrams, last2, edit)))
 
 
-def get_feature_edit_vector(sp, edit, val):
+def get_feature_edit_vector(sp, last2, last, word, ops, max_dist=1):
     foo = ''
-    foo += str(sp.get_index(edit)) + ':1 '
-    if val[2] == '':
-        foo += str(sp.unique_word_count + 1) + ':1'
-    elif val[2] == 's':
-        foo += str(sp.unique_word_count + 2) + ':1'
-    elif val[2] == 'a':
-        foo += str(sp.unique_word_count + 3) + ':1'
-    elif val[2] == 'd':
-        foo += str(sp.unique_word_count + 4) + ':1'
-    elif val[2] == 't':
-        foo += str(sp.unique_word_count + 5) + ':1'
-    foo += '\n'
+    st = 0
+    foo += str(sp.get_index(last2)) + ':1 '
+    st += sp.unique_word_count + 1
+    foo += str(st + sp.get_index2(last)) + ':1 '
+    st += sp.unique_word_count + 1 + sp.add_dict_size
+    foo += str(st + sp.get_index(word)) + ':1 '
+    st += sp.unique_word_count + 1
+    for i in range(max_dist):
+        if i < len(ops):
+            foo += str(st + op_costs[ops[i]]) + ':1 '
+        else:
+            foo += str(st) + ':1 '
+        st += 5
     return foo
 
 
-def make_feature_edit_vector(corpus, train_set):
+def make_feature_edit_vector(corpus, train_set, max_dist=1):
     from SymSpell import SymSpell
-    sp = SymSpell(corpus)
-    sp.max_edit_distance = 1
+    sp = SymSpell(corpus, max_dist, load_additional_dict(corpus, 'raw/train'))
 
     print 'make feature edit vector', corpus, train_set
     with open(train_set, 'r') as train_in:
-        with open(train_set + '.efeature', 'w') as fea_out:
-            count_total = 0
-            stime = time.time()
+        with open(train_set + '.ellfeature' + str(max_dist), 'w') as fea_out:
+            with open(train_set + '.ellfeature' + str(max_dist) + '.log', 'w') as log_out:
+                count_total = 0
+                stime = time.time()
 
-            for line in train_in:
-                label, last = split_last_words(line, 2)
+                for line in train_in:
+                    label, last, last2 = split_last_words(line, 3)
 
-                count_total += 1
+                    count_total += 1
 
-                if count_total % 10000 == 0:
-                    etime = time.time()
-                    print count_total, etime - stime
-                    stime = etime
+                    if count_total % 10000 == 0:
+                        etime = time.time()
+                        print count_total, etime - stime
+                        stime = etime
 
-                sug_list = sp.get_suggestions(last, True)
-                for edit, val in sug_list:
-                    if edit == label:
-                        fea_out.write('1 ')
-                    else:
-                        fea_out.write('0 ')
-                    fea_out.write(get_feature_edit_vector(sp, edit, val))
-
-
+                    sug_list = sp.get_suggestions(last, True)
+                    for edit, val in sug_list:
+                        log_out.write(edit + ' ')
+                        if edit == label:
+                            fea_out.write('1 ')
+                        else:
+                            fea_out.write('0 ')
+                        fea_out.write(get_feature_edit_vector(sp, last2, last, edit, val[2], max_dist) + '\n')
+                    log_out.write('\n')
