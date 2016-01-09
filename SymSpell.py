@@ -86,7 +86,7 @@ from Editor import *
 
 
 class SymSpell:
-    def __init__(self, corpus_path, max_dist=3, add_dict=None):
+    def __init__(self, corpus_path, max_dist=3, add_dict=None, editor=None):
         self.max_edit_distance = max_dist
         self.verbose = 2
         # 0: top suggestion
@@ -101,6 +101,8 @@ class SymSpell:
         if add_dict:
             self.add_dict = add_dict
             self.add_dict_size = len(add_dict)
+        if editor:
+            init_edit_cost(editor)
 
         print "Please wait..."
         start_time = time.time()
@@ -208,7 +210,7 @@ class SymSpell:
                 self.dictionary[k].append(index)
         print index, 'unique words'
 
-    def get_suggestions(self, string, silent=False):
+    def get_suggestions(self, string, silent=False, trace=False):
         '''
         return list of suggested corrections for potentially incorrectly
         spelled word
@@ -247,8 +249,11 @@ class SymSpell:
                     '''
                     suggest_dict[q_item] = (self.dictionary[q_item][1], len(string) - len(q_item))
                     '''
-                    suggest_dict[q_item] = (self.dictionary[q_item][1],
-                                            len(string) - len(q_item), 'a' * (len(string) - len(q_item)))
+                    if trace:
+                        item_dist = dldist_with_op_trace(q_item, string)
+                    else:
+                        item_dist = dldist_with_op(q_item, string)
+                    suggest_dict[q_item] = (self.dictionary[q_item][1], item_dist[0], item_dist[1])
                     # early exit
                     if ((self.verbose < 2) and (len(string) == len(q_item))):
                         break
@@ -284,7 +289,10 @@ class SymSpell:
                         '''
                         item_dist = dameraulevenshtein(sc_item, string)
                         '''
-                        item_dist = dldist_with_op(sc_item, string)
+                        if trace:
+                            item_dist = dldist_with_op_trace(sc_item, string)
+                        else:
+                            item_dist = dldist_with_op(sc_item, string)
 
                         # do not add words with greater edit distance if
                         # verbose setting not on

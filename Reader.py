@@ -11,7 +11,36 @@ letters = {'\'': 1, '<s>': 2, 'a': 3, 'b': 4, 'c': 5, 'd': 6, 'e': 7, 'f': 8, 'g
            'w': 25, 'x': 26, 'y': 27, 'z': 28}
 letters_num = len(letters) + 1
 word_length = 30
-op_costs = {'s': 1, 'a': 2, 'd': 3, 't': 4}
+op_costs = {'s': 0, 'a': 1, 'd': 2, 't': 3}
+
+
+def get_kb_map():
+    raw_board = ['1234567890-=',
+                 'qwertyuiop[]\\',
+                 'asdfghjkl;\'',
+                 'zxcvbnm,./']
+
+    kb_map = {}
+    for r in range(4):
+        for i in range(len(raw_board[r])):
+            nbs = ''
+            if i > 0:
+                nbs += raw_board[r][i - 1]
+            if i + 1 < len(raw_board[r]):
+                nbs += raw_board[r][i + 1]
+            if r > 0:
+                if i < len(raw_board[r - 1]):
+                    nbs += raw_board[r - 1][i]
+                if i + 1 < len(raw_board[r - 1]):
+                    nbs += raw_board[r - 1][i + 1]
+            if r < 3:
+                if i < len(raw_board[r + 1]):
+                    nbs += raw_board[r + 1][i]
+                if 0 <= i - 1 < len(raw_board[r + 1]):
+                    nbs += raw_board[r + 1][i - 1]
+            kb_map[raw_board[r][i]] = nbs
+
+    return kb_map
 
 
 def split_train(train_set, alpha=0.1):
@@ -27,8 +56,11 @@ def split_train(train_set, alpha=0.1):
                         out2.write(line + '\n')
 
 
-def split_last_words(line, num=3):
-    line = line.strip().lower()
+def split_last_words(line, num=3, cs=False):
+    if not cs:
+        line = line.strip().lower()
+    else:
+        line = line.strip()
     lastindex = len(line)
     res = []
     for i in range(num):
@@ -128,6 +160,7 @@ def count_word():
 
 
 def count_ngram(N, fin, fout):
+    print 'count', N, '-gram on', fin, 'out to', fout
     import pynlpl.textprocessors as proc
 
     with open(fin, 'r') as corpus_in:
@@ -143,60 +176,69 @@ def count_ngram(N, fin, fout):
 
         with open(fout, 'w') as ngrams_out:
             for key, value in sorted(ngrams.items(), key=lambda (term, freq): (term, -freq)):
-                ngrams_out.write(key + '\t' + str(value) + '\n')
+                if value > 1:
+                    ngrams_out.write(key + '\t' + str(value) + '\n')
 
 
-def ngram_on_train(train_set, test_set, max_len=6):
+def count_ngram2(N, fin, fout):
+    print 'count', N, '-gram2 on', fin, 'out to', fout, 'only top candidate reserved'
+    import pynlpl.textprocessors as proc
+
+    with open(fin, 'r') as corpus_in:
+        ngrams = {}
+        count_total = 0
+        for line in corpus_in:
+            words = proc.tokenize(line)
+            for ngram in proc.Windower(words, N, '<s>', None):
+                term = '\t'.join(ngram[:-1])
+                cand = ngram[-1]
+                if term in ngrams:
+                    if cand in ngrams[term]:
+                        ngrams[term][cand] += 1
+                    else:
+                        ngrams[term][cand] = 1
+                else:
+                    ngrams[term] = {cand: 1}
+
+            count_total += 1
+            if count_total % 1000000 == 0:
+                print count_total
+
+        for k in ngrams.keys():
+            ngrams[k] = sorted(ngrams[k].items(), key=lambda (_, freq): (-freq))[0][0]
+
+        with open(fout, 'w') as ngrams_out:
+            for key, value in sorted(ngrams.items(), key=lambda (term, cand): (term, cand)):
+                ngrams_out.write(key + '\t' + value + '\n')
+
+
+def count_ngram3(train_set, max_len=6, cs=False):
     with open(train_set, 'r') as train_in:
-        trans = [{} for i in range(max_len)]
+        ngrams_dict = [{} for i in range(max_len)]
         for line in train_in:
             words = line.strip().lower().split('<s>')[-1].split(' ')
-            # words = line.strip().lower().split(' ')
-            label = words[-1]
+            label = split_last_words(line, 1, cs)[0]
             if words[0] != '<s>':
                 words = ['<s>'] + words
             words = words[:-1]
 
             for i in range(min(max_len, len(words))):
                 term = ' '.join(words[len(words) - 1 - i:])
-                if term in trans[i]:
-                    if label in trans[i][term]:
-                        trans[i][term][label] += 1
+                if term in ngrams_dict[i]:
+                    if label in ngrams_dict[i][term]:
+                        ngrams_dict[i][term][label] += 1
                     else:
-                        trans[i][term][label] = 1
+                        ngrams_dict[i][term][label] = 1
                 else:
-                    trans[i][term] = {label: 1}
+                    ngrams_dict[i][term] = {label: 1}
 
-        for i in range(len(trans)):
-            for k in trans[i].keys():
-                trans[i][k] = sorted(trans[i][k].items(), reverse=True, key=lambda (a, b): b)[0][0]
-
-    with open(test_set, 'r') as test_in:
-        count_match = 0
-        count_miss = 0
-        count_total = 0
-        for line in test_in:
-            words = line.strip().lower().split('<s>')[-1].split(' ')
-            # words = line.strip().lower().split(' ')
-            label = words[-1]
-            if words[0] != '<s>':
-                words = ['<s>'] + words
-            words = words[:-1]
-            count_total += 1
-
-            flag = False
-            for i in range(min(max_len, len(words)) - 1, -1, -1):
-                term = ' '.join(words[len(words) - 1 - i:])
-                if term in trans[i]:
-                    if trans[i][term] == label:
-                        count_match += 1
-                        flag = True
-                    break
-            if not flag:
-                count_miss += 1
-
-    print count_match, count_miss, count_total
-    print count_match * 1.0 / count_total, count_miss * 1.0 / count_total
+        for i in range(len(ngrams_dict)):
+            for k in ngrams_dict[i].keys():
+                ngrams_dict[i][k] = sorted(ngrams_dict[i][k].items(), reverse=True, key=lambda (a, b): b)[0][0]
+    fout_path = train_set + '.ngram.bin'
+    if cs:
+        fout_path += '.cs'
+    pk.dump(ngrams_dict, open(fout_path, 'w'))
 
 
 def load_dictionary(dict):
@@ -227,53 +269,72 @@ def load_additional_dict(corpus, train_set):
     return add_dict
 
 
-def load_bigrams(bigram_path):
-    print 'load bigrams', bigram_path, 'form: {dict:[list]}'
+def load_ngrams(bigram_path):
+    print 'load n-grams', bigram_path, 'form: {dict:[list]}'
 
-    bigrams_bin_path = bigram_path + '.bin'
-    if os.path.isfile(bigrams_bin_path):
-        return pk.load(open(bigrams_bin_path, 'r'))
+    ngrams_bin_path = bigram_path + '.bin'
+    if os.path.isfile(ngrams_bin_path):
+        return pk.load(open(ngrams_bin_path, 'r'))
 
-    bigrams = {}
-    with open(bigram_path, 'r') as bigram_in:
-        for line in bigram_in:
+    ngrams = {}
+    with open(bigram_path, 'r') as ngram_in:
+        for line in ngram_in:
             arr = line.strip().split()
-            if arr[0] in bigrams:
-                bigrams[arr[0]].append((arr[1], int(arr[2])))
+            term = '\t'.join(arr[:-2])
+            if term in ngrams:
+                ngrams[term].append((arr[-2], int(arr[-1])))
             else:
-                bigrams[arr[0]] = [(arr[1], int(arr[2]))]
+                ngrams[term] = [(arr[-2], int(arr[-1]))]
 
-    for key in bigrams.keys():
-        bigrams[key].sort(reverse=True, key=lambda (a, b): b)
+    for key in ngrams.keys():
+        ngrams[key].sort(reverse=True, key=lambda (a, b): b)
 
-    pk.dump(bigrams, open(bigrams_bin_path, 'w'))
-    return bigrams
+    pk.dump(ngrams, open(ngrams_bin_path, 'w'))
+    return ngrams
 
 
-def load_bigrams2(bigram_path):
-    print 'load bigrams2', bigram_path, "form: {dict:{dict ('#total#: total_num')}}"
+def load_ngrams2(ngram_path):
+    print 'load ngrams2', ngram_path, "form: {dict:{dict ('#total#: total_num')}}"
 
-    bigram_bin_path = bigram_path + '.bin2'
-    if os.path.isfile(bigram_bin_path):
-        return pk.load(open(bigram_bin_path, 'r'))
+    ngram_bin_path = ngram_path + '.bin2'
+    if os.path.isfile(ngram_bin_path):
+        return pk.load(open(ngram_bin_path, 'r'))
 
-    bigrams = {}
-    with open(bigram_path, 'r') as bigram_in:
-        for line in bigram_in:
+    ngrams = {}
+    with open(ngram_path, 'r') as ngram_in:
+        for line in ngram_in:
             arr = line.strip().split()
-            if arr[0] in bigrams:
-                bigrams[arr[0]][arr[1]] = int(arr[2])
+            term = '\t'.join(arr[:-2])
+            if term in ngrams:
+                ngrams[term][arr[-2]] = int(arr[-1])
             else:
-                bigrams[arr[0]] = {arr[1]: int(arr[2])}
+                ngrams[term] = {arr[-2]: int(arr[-1])}
 
-    for key in bigrams.keys():
+    for key in ngrams.keys():
         counter = 0
-        for key2 in bigrams[key]:
-            counter += bigrams[key][key2]
-        bigrams[key]['#total#'] = counter
+        for key2 in ngrams[key]:
+            counter += ngrams[key][key2]
+        ngrams[key]['#total#'] = counter
 
-    pk.dump(bigrams, open(bigram_bin_path, 'w'))
-    return bigrams
+    pk.dump(ngrams, open(ngram_bin_path, 'w'))
+    return ngrams
+
+
+def load_ngram3(ngram_path):
+    print 'load ngram3', ngram_path, 'form: {term: cand}'
+    ngram_bin_path = ngram_path + '.bin3'
+    if os.path.isfile(ngram_bin_path):
+        return pk.load(open(ngram_bin_path, 'r'))
+
+    ngrams = {}
+    with open(ngram_path, 'r') as ngram_in:
+        for line in ngram_in:
+            arr = line.strip().split()
+            term = '\t'.join(arr[:-1])
+            ngrams[term] = arr[-1]
+
+    pk.dump(ngrams, open(ngram_bin_path, 'w'))
+    return ngrams
 
 
 def get_bifreq(bigrams, key, key2, norm=True, smooth=False):
@@ -293,7 +354,7 @@ def make_feature(corpus, train_set):
     print 'make feature', corpus, train_set
     with open(train_set, 'r') as train_in:
         with open(train_set + '.feature', 'w') as feature_out:
-            bigrams = load_bigrams(corpus + '.bigram')
+            bigrams = load_ngrams(corpus + '.bigram')
 
             count_total = 0
             count_feature = 0
@@ -394,7 +455,7 @@ def make_feature_word_vector(corpus, train_set):
     print 'make feature word vector', corpus, train_set
     with open(train_set, 'r') as train_in:
         with open(train_set + '.vfeature2', 'w') as feature_out:
-            bigrams = load_bigrams2(corpus + '.bigram')
+            bigrams = load_ngrams2(corpus + '.bigram')
 
             count_total = 0
             count_feature = long(0)
@@ -472,3 +533,112 @@ def make_feature_edit_vector(corpus, train_set, max_dist=1):
                             fea_out.write('0 ')
                         fea_out.write(get_feature_edit_vector(sp, last2, last, edit, val[2], max_dist) + '\n')
                     log_out.write('\n')
+
+
+def get_we(model, word):
+    for i in range(len(word), 0, -1):
+        if word[:i] in model:
+            return model[word[:i]]
+    return [0] * model.vector_size
+
+
+def get_feature_we(w2v_model, last2, last, pred, freq, bi_freq, ev):
+    last2v = get_we(w2v_model, last2)
+    lastv = get_we(w2v_model, last)
+    predv = get_we(w2v_model, pred)
+    if pred.startswith(last) or last.startswith(pred):
+        is_prefix = 1
+    else:
+        is_prefix = 0
+
+    foo = ''
+    st = 0
+    for i in range(len(last2v)):
+        foo += str(st + i) + ':' + str(last2v[i]) + ' '
+    st += len(last2v)
+    for i in range(len(lastv)):
+        foo += str(st + i) + ':' + str(lastv[i]) + ' '
+    st += len(lastv)
+    for i in range(len(predv)):
+        foo += str(st + i) + ':' + str(predv[i]) + ' '
+    st += len(predv)
+    foo += str(st) + ':' + str(freq) + ' '
+    st += 1
+    foo += str(st) + ':' + str(bi_freq) + ' '
+    st += 1
+    for i in range(len(ev)):
+        foo += str(st + i) + ':' + str(ev[i]) + ' '
+    st += len(ev)
+    foo += str(st) + ':' + str(is_prefix)
+
+    return foo
+
+
+def make_feature_we(corpus, ngram_path, w2v_path, train_set):
+    print 'make feature word embedding'
+    from SymSpell import SymSpell
+    sp = SymSpell(corpus, 3)
+    print 'max edit dist', 3
+    from gensim.models.word2vec import Word2Vec
+    w2v = Word2Vec.load(w2v_path)
+    kb_map = get_kb_map()
+    bigrams = load_ngrams2(ngram_path)
+
+    with open(train_set, 'r') as train_in:
+        with open(train_set + '.feature.w2v', 'w') as fea_out:
+            ngrams = load_ngrams(ngram_path)
+
+            count_total = 0
+            stime = time.time()
+
+            for line in train_in:
+                label, last, last2 = split_last_words(line, 3)
+
+                count_total += 1
+                if count_total % 10000 == 0:
+                    etime = time.time()
+                    print count_total, etime - stime
+                    stime = etime
+
+                term = last2
+                edit_list = sp.get_suggestions(last, True, True)
+                sug_list = []
+                freqs = {}
+                evs = {}
+                for ed, trace in edit_list:
+                    flag = True
+                    ev = [0] * len(op_costs)
+                    for op in trace[2].split('<op>'):
+                        if len(op) < 1:
+                            continue
+                        ev[op_costs[op[0]]] += 1
+                        if op.startswith('s<tr>'):
+                            trs = op[5:].split('<sep>')
+                            if trs[0] in kb_map and trs[1] not in kb_map[trs[0]]:
+                                flag = False
+                                break
+                    if flag:
+                        sug_list.append(ed)
+                        freqs[ed] = trace[0] * 1.0 / sp.total_word_count
+                        evs[ed] = ev
+
+                if term in ngrams:
+                    for pred, _ in ngrams[term]:
+                        if pred in sug_list:
+                            if pred == label:
+                                fea_out.write('1 ')
+                            else:
+                                fea_out.write('0 ')
+
+                            last2v = get_we(w2v, last2)
+                            lastv = get_we(w2v, last)
+                            candv = get_we(w2v, pred)
+                            freq = freqs[pred]
+                            bi_freq = get_bifreq(bigrams, last2, pred)
+                            ev = evs[pred]
+                            if pred.startswith(last) or last.startswith(pred):
+                                is_prefix = 1
+                            else:
+                                is_prefix = 0
+
+                            fea_out.write(get_feature_we(last2v, lastv, candv, freq, bi_freq, ev, is_prefix) + '\n')
