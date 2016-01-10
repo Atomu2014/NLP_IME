@@ -104,7 +104,7 @@ class SymSpell:
         if editor:
             init_edit_cost(editor)
 
-        print "Please wait..."
+        # print "Please wait..."
         start_time = time.time()
         dict_path = corpus_path + '.bin'
         if os.path.isfile(dict_path):
@@ -115,15 +115,14 @@ class SymSpell:
             pk.dump([self.longest_word_length, self.total_word_count, self.unique_word_count, self.dictionary],
                     open(dict_path, 'w'))
         run_time = time.time() - start_time
-        print "total words processed: %i" % self.total_word_count
-        print "total unique words in corpus: %i" % self.unique_word_count
-        print "total items in dictionary (corpus words and deletions): %i" % len(self.dictionary)
-        print "  edit distance for deletions: %i" % self.max_edit_distance
-        print "  length of longest word in corpus: %i" % self.longest_word_length
-        print '-----'
-        print '%.2f seconds to run' % run_time
-        print '-----'
-        self.test()
+        # print "total words processed: %i" % self.total_word_count
+        # print "total unique words in corpus: %i" % self.unique_word_count
+        # print "total items in dictionary (corpus words and deletions): %i" % len(self.dictionary)
+        # print "  edit distance for deletions: %i" % self.max_edit_distance
+        # print "  length of longest word in corpus: %i" % self.longest_word_length
+        # print '-----'
+        # print '%.2f seconds to run' % run_time
+        # print '-----'
 
     def get_deletes_list(self, w):
         '''
@@ -362,14 +361,6 @@ class SymSpell:
                 return []
         else:
             return outlist
-
-    def test(self):
-        counter = 0
-        for k in self.dictionary.keys():
-            # print k, self.dictionary[k]
-            if len(self.dictionary[k]) > 2:
-                counter += 1
-        print counter
 
     def get_index(self, word):
         if word in self.dictionary and len(self.dictionary[word]) > 2:

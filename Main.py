@@ -1,5 +1,3 @@
-import xgboost as xgb
-
 from Reader import *
 
 
@@ -138,6 +136,7 @@ def test_word_vector(corpus, train_set, model_path):
     from SymSpell import SymSpell
     sp = SymSpell(corpus)
     print 'test vector', corpus, train_set, model_path
+    import xgboost as xgb
 
     with open(train_set, 'r') as train_in:
         # with open()
@@ -180,6 +179,8 @@ def test_edit_vector(corpus, train_set, model_path):
 
     from SymSpell import SymSpell
     sp = SymSpell(corpus, 1, load_additional_dict(corpus, 'raw/train'))
+    import xgboost as xgb
+
     with open(train_set, 'r') as train_in:
         # with open(train_set + '.r', 'w') as logr_out:
         #     with open(train_set + '.w', 'w') as logw_out:
@@ -224,6 +225,7 @@ def test_word_embed(corpus, w2v_path, bigram_path, train_set, model_path):
     w2v = Word2Vec.load(w2v_path)
     kb_map = get_kb_map()
     bigrams = load_ngrams2(bigram_path)
+    import xgboost as xgb
     bst = xgb.Booster(model_file=model_path)
 
     with open(train_set, 'r') as train_in:
@@ -285,11 +287,12 @@ def test_word_embed(corpus, w2v_path, bigram_path, train_set, model_path):
     print count_match * 1.0 / count_total
 
 
-def test_ngram2(corpus, bigram_path, ngram_train_set, test_set, max_len=6, cs=False, eval=False, editor=None):
-    # if cs:
-    #     ngrams_dict = pk.load(open(ngram_train_set + '.ngram.bin.cs', 'r'))
-    # else:
-    #     ngrams_dict = pk.load(open(ngram_train_set + '.ngram.bin', 'r'))
+def test_ngram2(corpus, ngram_train_set, test_set, max_len=6, cs=False, eval=False, editor=None):
+    print 'test ngram2', corpus, ngram_train_set, test_set, max_len, cs
+    if cs:
+        ngrams_dict = pk.load(open(ngram_train_set + '.ngram.bin.cs', 'r'))
+    else:
+        ngrams_dict = pk.load(open(ngram_train_set + '.ngram.bin', 'r'))
 
     from SymSpell import SymSpell
     sp = SymSpell(corpus, 3, editor=editor)
@@ -297,46 +300,40 @@ def test_ngram2(corpus, bigram_path, ngram_train_set, test_set, max_len=6, cs=Fa
     kb_map = get_kb_map()
 
     with open(test_set, 'r') as test_in:
-        # with open(test_set + '.log', 'w') as test_log:
+        with open(test_set + '.result.l', 'w') as test_out:
             count_match = 0
             count_miss = 0
             count_total = 0
             stime = time.time()
 
             for line in test_in:
-                    words = line.strip().lower().split('<s>')[-1].split(' ')
-                    if words[0] != '<s>':
-                        words = ['<s>'] + words
-                    if eval:
-                        label = split_last_words(line, 1, False)[0]
-                        words = words[:-1]
+                words = line.strip().lower().split('<s>')[-1].split(' ')
+                if words[0] != '<s>':
+                    words = ['<s>'] + words
+                if eval:
+                    label = split_last_words(line, 1, True)[0]
+                    words = words[:-1]
 
-                    last_word = words[-1]
-                    count_total += 1
-                    if count_total % 1000 == 0:
-                        etime = time.time()
-                        print count_total, etime - stime, count_match * 1.0 / count_total
-                        stime = etime
+                last_word = words[-1]
+                count_total += 1
+                if count_total % 10000 == 0:
+                    etime = time.time()
+                    print count_total, etime - stime, count_match * 1.0 / count_total
+                    stime = etime
 
-                # flag = False
-                # for i in range(min(max_len, len(words)) - 1, -1, -1):
-                #     term = ' '.join(words[len(words) - 1 - i:])
-                #     if term in ngrams_dict[i]:
-                #         cand = ngrams_dict[i][term]
-                #         if words[-2] == '<s>':
-                #             cand = cand[0].upper() + cand[1:]
-                #         if eval and cand.lower() == label.lower():
-                #             count_match += 1
-                #         # elif eval and cand.lower() == label.lower():
-                #         #     count_case_error += 1
-                #         #     test_log.write(line + '\t' + ngrams_dict[i][term] + '\n')
-                #         flag = True
-                #         break
-                # if not flag:
+                flag = False
+                for i in range(min(max_len, len(words)) - 1, -1, -1):
+                    term = ' '.join(words[len(words) - 1 - i:])
+                    if term in ngrams_dict[i]:
+                        cand = ngrams_dict[i][term]
+                        test_out.write(cand + '\n')
+                        if eval and cand == label:
+                            count_match += 1
+                        flag = True
+                        break
+                if not flag:
                     edit_list = sp.get_suggestions(last_word, True, True)
                     sug_list = []
-                    # freqs = {}
-                    # evs = {}
                     for ed, trace in edit_list:
                         flag = True
                         ev = [0] * len(op_costs)
@@ -351,14 +348,27 @@ def test_ngram2(corpus, bigram_path, ngram_train_set, test_set, max_len=6, cs=Fa
                                     break
                         if flag:
                             sug_list.append(ed)
-                            # freqs[ed] = trace[0] * 1.0 / sp.total_word_count
-                            # evs[ed] = ev
 
                     if len(sug_list) > 0:
-                        if sug_list[0].lower() == label.lower():
+                        cand = sug_list[0]
+                        # if words[-2] == '<s>':
+                        #     if len(cand) == 1:
+                        #         cand = cand.upper()
+                        #     else:
+                        #         cand = cand[0].upper() + cand[1:]
+                        test_out.write(cand + '\n')
+                        if eval and cand == label:
                             count_match += 1
-                        # elif label.lower() in sug_list:
-                        #     test_log.write(line.strip() + '\t' + str(sug_list) + '\n')
+                    else:
+                        cand = last_word
+                        # if words[-2] == '<s>':
+                        #     if len(cand) == 1:
+                        #         cand = cand.upper()
+                        #     else:
+                        #         cand = cand[0].upper() + cand[1:]
+                        test_out.write(cand + '\n')
+                        if eval and cand == label:
+                            count_match += 1
 
     print count_match, count_miss, count_total, time.time() - stime
     print count_match * 1.0 / count_total, count_miss * 1.0 / count_total
@@ -366,36 +376,66 @@ def test_ngram2(corpus, bigram_path, ngram_train_set, test_set, max_len=6, cs=Fa
 
 
 if __name__ == "__main__":
-    # split_train('raw/train.part1', 0.7)
-    # make_feature('raw/corpus.sens.14k', 'raw/train.part1.part1')
-    # make_feature_word_vector('raw/corpus.sens.14k', 'raw/train.part1')
-    # make_feature_edit_vector('raw/corpus.sens.14k', 'raw/train.part1', 1)
-    # make_feature_we('raw/corpus.sens.14k', 'raw/corpus.sens.bigram', 'raw/corpus.sens.w2v.s10', 'raw/train.part1')
-    # make_feature_we('raw/corpus.sens.14k', 'raw/corpus.sens.bigram', 'raw/corpus.sens.w2v.s10', 'raw/train.part2')
-    # test_label('raw/train.part1')
-    # test_ngram('raw/corpus.sens.14k', 'raw/corpus.sens.4gram.max', 'raw/train.part1')
-    # test_bigram('raw/corpus.sens.14k', 'raw/corpus.sens.bigram', 'raw/train.part1')
-    # test_edit('raw/corpus.sens.14k', 'raw/train.part1')
-    # test_vector('raw/corpus.sens.14k', 'raw/train.part1', 'raw/train.part1.vfeature2.part2.model')
-    # test_edit_vector('raw/corpus.sens.14k', 'raw/train.part1', 'raw/train.part2.ellfeature1.model')
-    # test_edit_vector('raw/corpus.sens.14k', 'raw/train.part2', 'raw/train.part2.ellfeature1.model')
-    # test_word_embed('raw/corpus.sens.14k', 'raw/corpus.sens.w2v.s10', 'raw/corpus.sens.bigram', 'raw/train.part1.part2',
-    #                 'raw/train.part1.part1.feature.w2v.model')
-    # test_word_embed('raw/corpus.sens.14k', 'raw/corpus.sens.w2v.s10', 'raw/corpus.sens.bigram', 'raw/train.part1.part1',
-    #                 'raw/train.part1.part1.feature.w2v.model')
-    # ngram_on_train('raw/train', 'raw/test_data.txt', 6, False)
-    # count_ngram2(6, 'raw/corpus.sens', 'raw/corpus.sens.6gram.max')
-    # count_ngram3('raw/train.part2', 6, True)
-    # count_ngram3('raw/train.part2', 6, False)
+    # count_ngram3('raw/train', 6, True)
+    # count_ngram3('raw/train', 6, False)
 
-    with open('raw/edit_cost.log2', 'w') as log_out:
-        for a in np.arange(1, 2.1, 0.2):
-            # for s in np.arange(1, 2.1, 0.2):
-                s = 2
-                for d in np.arange(1, 2.1, 0.2):
-                    for t in np.arange(1, 2.1, 0.2):
-                        header = str(a) + '\t' + str(s) + '\t' + str(d) + '\t' + str(t) + '\t'
-                        log_out.write(header)
-                        score = test_ngram2('raw/corpus.sens.14k', 'raw/corpus.sens.bigram', 'raw/train.part2',
-                                            'raw/train.part1.clean', 6, False, True, {'a': a, 's': s, 'd': d, 't': t})
-                        log_out.write(str(score) + '\n')
+    # editor = {'a': 1, 's': 0.5, 'd': 0.5, 't': 0.5}
+    # score = test_ngram2('raw/corpus.sens.70k', 'raw/train.part5', 'raw/train.part6', 6, True, True, editor)
+    # score = test_ngram2('raw/corpus.sens.70k', 'raw/train.part3', 'raw/train.part4', 6, True, True, editor)
+    # score = test_ngram2('raw/corpus.sens.70k', 'raw/train', 'raw/test_data.txt', 6, True, False, editor)
+    # exit(0)
+
+    import sys
+
+    ngrams_dict = pk.load(open('raw/train.ngram.bin.cs', 'r'))
+    max_len = 6
+    editor = {'a': 1, 's': 0.5, 'd': 0.5, 't': 0.5}
+    from SymSpell import SymSpell
+    sp = SymSpell('raw/corpus.sens.70k', 3, editor=editor)
+    # print 'max edit dist', 3
+    kb_map = get_kb_map()
+    print 'please input'
+
+    while True:
+        line = sys.stdin.readline().strip()
+        if len(line.strip()) == 0:
+            exit(0)
+
+        words = line.strip().lower().split('<s>')[-1].split(' ')
+        if words[0] != '<s>':
+            words = ['<s>'] + words
+
+        last_word = words[-1]
+
+        flag = False
+        for i in range(min(max_len, len(words)) - 1, -1, -1):
+            term = ' '.join(words[len(words) - 1 - i:])
+            if term in ngrams_dict[i]:
+                cand = ngrams_dict[i][term]
+                print(cand)
+                flag = True
+                break
+        if not flag:
+            edit_list = sp.get_suggestions(last_word, True, True)
+            sug_list = []
+            for ed, trace in edit_list:
+                flag = True
+                ev = [0] * len(op_costs)
+                for op in trace[2].split('<op>'):
+                    if len(op) < 1:
+                        continue
+                    ev[op_costs[op[0]]] += 1
+                    if op.startswith('s<tr>'):
+                        trs = op[5:].split('<sep>')
+                        if trs[0] in kb_map and trs[1] not in kb_map[trs[0]]:
+                            flag = False
+                            break
+                if flag:
+                    sug_list.append(ed)
+
+            if len(sug_list) > 0:
+                cand = sug_list[0]
+                print(cand)
+            else:
+                cand = last_word
+                print(cand)

@@ -43,11 +43,11 @@ def get_kb_map():
     return kb_map
 
 
-def split_train(train_set, alpha=0.1):
+def split_train(train_set, alpha=0.1, ext1='.part1', ext2='.part2'):
     import random
     with open(train_set, 'r') as fin:
-        with open(train_set + '.part1', 'w') as out1:
-            with open(train_set + '.part2', 'w') as out2:
+        with open(train_set + ext1, 'w') as out1:
+            with open(train_set + ext2, 'w') as out2:
                 for line in fin:
                     line = line.strip()
                     if random.random() <= alpha:

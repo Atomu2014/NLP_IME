@@ -2,7 +2,7 @@ edit_cost = {}
 
 
 def init_edit_cost(editor):
-    print 'init edit cost', editor
+    # print 'init edit cost', editor
     edit_cost['a'] = editor['a']
     edit_cost['s'] = editor['s']
     edit_cost['d'] = editor['d']
